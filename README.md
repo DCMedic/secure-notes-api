@@ -1,195 +1,85 @@
-# secure-notes-api
+# Secure Notes API
 
-Architecture and Security Design
+A compact FastAPI application for exploring secure backend architecture, authentication, authorization, encryption at rest, and explicit trust boundaries.
 
-The Secure Notes API is designed as a small but realistic example of a security-aware backend service. The application allows authenticated users to store and retrieve personal notes while ensuring that sensitive information is protected using modern security practices. The architecture intentionally emphasizes defensive design, clear data boundaries, and responsible credential management.
+The goal of this project is not to present a production-ready notes service. It is to make the security decisions in a small backend system visible, understandable, and easy to inspect.
 
-System Overview
+## What it demonstrates
 
-The system consists of a REST API built with FastAPI, a lightweight and high-performance Python framework for building web services. The API exposes endpoints for user registration, authentication, and note management. Internally, the service separates authentication logic, encryption logic, database access, and API routing to maintain clean architectural boundaries.
+- User registration and authentication
+- Short-lived JWT-based access control
+- Password hashing with bcrypt
+- Application-level encryption of note content using Fernet
+- SQLAlchemy-backed persistence
+- Environment-based secret configuration
+- Separation of authentication, encryption, database, and routing responsibilities
+- Automated tests for core authentication and note workflows
 
-At a high level, the workflow operates as follows:
+## Security model
 
-A user registers or logs in using the authentication endpoints.
+A request passes through several distinct trust transitions rather than being treated as implicitly safe after login:
 
-The system validates credentials and issues a signed JSON Web Token (JWT).
+1. A user authenticates with a username and password.
+2. The server verifies the password hash and issues a signed, expiring JWT.
+3. Protected routes validate the token before authorizing access.
+4. Note ownership is enforced at the application layer.
+5. Note content is encrypted before database persistence.
+6. Ciphertext is decrypted only when an authorized user retrieves the note.
 
-The client includes the token in future API requests.
+This separation is intentional. Authentication establishes identity; it does not automatically make every action or data access trustworthy.
 
-Authenticated requests can create, retrieve, or delete notes.
+## Password security
 
-Note content is encrypted before it is written to the database.
+Passwords are never stored in plaintext. They are hashed with bcrypt through Passlib before persistence, and login attempts are verified against the stored hash.
 
-When a note is retrieved, the system decrypts the content before returning it to the user.
+For a production service, password policy, rate limiting, credential monitoring, stronger session controls, and centralized secret management would be additional requirements.
 
-This flow ensures that authentication, authorization, and data protection occur at distinct stages of request processing.
+## Encryption at rest
 
-Authentication Model
+Note content is encrypted using Fernet symmetric encryption before it is written to the database. The encryption key is supplied through environment configuration rather than embedded in source code.
 
-Authentication is implemented using JSON Web Tokens (JWT). After a successful login, the server generates a signed token that represents the authenticated user. The token includes a short expiration window and is verified on every protected API request.
+A production deployment should replace local environment-managed keys with a dedicated secrets or key-management service such as AWS KMS, Azure Key Vault, HashiCorp Vault, or an HSM-backed solution.
 
-Using token-based authentication provides several benefits:
+## Architecture
 
-Stateless authentication suitable for distributed systems
-
-Clear separation between authentication and application logic
-
-Reduced reliance on server-side session storage
-
-Compatibility with modern API clients and microservices
-
-The token payload contains the user identity and expiration timestamp, and the signature is verified using a server-side secret.
-
-Password Security
-
-User passwords are never stored in plaintext. Instead, they are processed using bcrypt hashing through the passlib library. Bcrypt is intentionally computationally expensive, which significantly reduces the effectiveness of brute-force password attacks.
-
-The authentication workflow follows these steps:
-
-The user submits a password during registration.
-
-The password is hashed using bcrypt.
-
-The hash is stored in the database.
-
-During login, the submitted password is verified against the stored hash.
-
-Because bcrypt includes built-in salting, identical passwords do not produce identical hashes, which helps mitigate rainbow table attacks.
-
-Encryption at Rest
-
-One of the primary goals of this project is to demonstrate application-level encryption of sensitive data.
-
-The content of each note is encrypted using the Fernet symmetric encryption scheme provided by the cryptography library. This encryption occurs before the data is written to the database.
-
-The workflow is as follows:
-
-A user submits note content.
-
-The application encrypts the content using a Fernet key.
-
-The encrypted ciphertext is stored in the database.
-
-When the note is retrieved, the ciphertext is decrypted before returning the response.
-
-This approach ensures that even if the database is accessed directly, the stored note contents remain unreadable without the encryption key.
-
-In a production environment, encryption keys should be managed using a dedicated key management system such as:
-
-AWS KMS
-
-Azure Key Vault
-
-HashiCorp Vault
-
-Hardware Security Modules (HSMs)
-
-For demonstration purposes, this project loads the encryption key from environment configuration.
-
-Database Design
-
-The service uses SQLAlchemy as the Object Relational Mapper (ORM) to interact with the database. SQLAlchemy allows the application to define structured models for users and notes while keeping database access organized and maintainable.
-
-The core models include:
-
-User
-
-Unique username
-
-Password hash
-
-Relationship to stored notes
-
-Note
-
-Note identifier
-
-Owner identifier
-
-Encrypted note content
-
-Title metadata
-
-SQLite is used as the default database to keep the project easy to run locally, but the architecture allows straightforward migration to PostgreSQL or other production-grade databases.
-
-API Security Controls
-
-Several defensive security practices are implemented throughout the service:
-
-Credential Protection
-Passwords are hashed using bcrypt and never stored in plaintext.
-
-Token-Based Authorization
-All note-related endpoints require a valid JWT access token.
-
-Encryption at Rest
-Sensitive note content is encrypted before database storage.
-
-Security Headers
-Basic HTTP security headers are applied to reduce common browser-based attack surfaces.
-
-Environment-Based Secrets
-Sensitive configuration such as signing keys and encryption keys are loaded from environment variables rather than embedded in the source code.
-
-Project Structure
-
-The repository is organized to separate responsibilities clearly across modules.
-
+```text
 app/
   config.py        Application configuration
   db.py            Database initialization
   models.py        Database models
-  schemas.py       API request/response schemas
+  schemas.py       Request/response schemas
   security.py      Authentication and encryption logic
   routes_auth.py   Authentication endpoints
-  routes_notes.py  Note management endpoints
+  routes_notes.py  Note-management endpoints
   main.py          FastAPI application entry point
+```
 
-This separation makes the code easier to maintain, test, and extend.
+SQLite keeps local setup lightweight, while the architecture can be migrated to PostgreSQL or another production-grade relational database.
 
-Testing and Validation
-
-The project includes automated tests that validate authentication and note management workflows. These tests confirm that:
-
-Users can register and log in successfully
-
-JWT authentication protects note endpoints
-
-Notes are stored and retrieved correctly
-
-Deletion operations behave as expected
-
-Automated testing helps ensure the API behaves consistently as new features are added.
-
-Intended Use
-
-This project is intended as a learning and portfolio example demonstrating secure backend design patterns. It is not intended to be deployed as a production system without additional controls such as:
-
-key management services
-
-rate limiting
-
-audit logging
-
-database migrations
-
-monitoring and alerting
-
-infrastructure hardening
-
-However, the architectural patterns used here mirror those commonly implemented in real-world secure API services.
 ## Run locally
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 
 cp .env.example .env
 uvicorn app.main:app --reload
+```
 
 ## Run with Docker
 
+```bash
 cp .env.example .env
 docker compose up --build
-Security notes (intended design)
+```
+
+## Production gaps
+
+This repository is deliberately a learning and portfolio project. A production service would require additional controls including centralized key management, rate limiting, audit logging, migration management, monitoring, alerting, infrastructure hardening, dependency management, and stronger operational controls.
+
+## Portfolio context
+
+Secure Notes API is a smaller demonstration of principles that I apply more extensively in [BattleReef Marine Controller](https://github.com/DCMedic/BattleReef-Marine-Controller): explicit identity, bounded authorization, separation of trust domains, auditable actions, and systems designed to fail safely rather than silently.
+
+See also [SOC Log Triage](https://github.com/DCMedic/soc-log-triage), [Security Program Starter](https://github.com/DCMedic/security-program-starter), and my [portfolio](https://github.com/DCMedic/about-dcmedic).
